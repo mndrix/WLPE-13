@@ -1,0 +1,127 @@
+\NeedsTeXFormat{LaTeX2e}
+\documentclass[runningheads]{llncs}
+\usepackage{times}
+\usepackage{url}
+\usepackage{fancyvrb}
+\usepackage{color}
+\usepackage{ifthen}
+\usepackage{calc}
+\sloppy
+
+\begin{document}
+
+\title{Why It’s Nice to be Quoted: Quasiquoting for Prolog}
+\pagestyle{empty}
+
+\author{Jan Wielemaker}
+\institute{Web and Media group,
+	   VU University Amsterdam, \\
+	   De Boelelaan 1081a, \\
+	   1081 HV Amsterdam,
+	   The Netherlands, \\
+	   \email{J.Wielemaker@vu.nl}}
+
+
+\maketitle
+\bgroup
+\makeatletter
+%\newcommand{\TBD}[1]{\textbf{#1}}
+
+\newcommand{\reffont}{\tt}
+\newcommand{\predref}[2]{{\bf #1/#2}}
+\newenvironment{itemlist}
+  {\itemize
+   \renewcommand\makelabel[1]{%
+     \hspace\labelwidth
+     \llap{\@itemlabel}%
+     \hspace\labelsep
+     \makebox[\linewidth][l]{\it ##1}%
+     \hspace{-\labelsep}}%
+     }%
+  {\enditemize}
+\definecolor{codeboxcolor}{rgb}{0.4,0.4,0.4}
+\DefineVerbatimEnvironment%
+  {code}{Verbatim}
+  {frame=single,
+   framerule=0.2pt,
+   rulecolor=\color{codeboxcolor},
+  }
+\newcommand{\const}[1]{{\tt #1}}
+\renewcommand{\arg}[1]{\ifmmode\mbox{\em #1}\else{\it #1}\fi}
+\newcommand{\secref}[1]{section~\ref{sec:#1}}
+\def\term{}
+\renewcommand{\term}[2]{%
+	\ifthenelse{\equal{\protect}{\protect#2}}{%
+	    {\reffont #1}}{%
+	    {\reffont #1}({\it #2})}}
+\catcode`\^^A=8% downarrow are for subscripts
+\catcode`\_=\active
+\def_{\ifmmode\else\_\fi}
+\newcommand{\bnfmeta}[1]{\ifmmode{\langle\mbox{\it #1}\rangle}\else$\langle\mbox{\it #1}\rangle$\fi}
+
+\newcommand{\onlinebreak}{}
+\def\@nodescription{false}
+\newcommand{\nodescription}{\def\@nodescription{true}}
+\newcommand{\defentry}[1]{\definition{#1}}
+\renewcommand{\definition}[1]{%
+	\onlinebreak%
+	\ifthenelse{\equal{\@nodescription}{true}}{%
+	    \def\@nodescription{false}%
+	    \makebox[-\leftmargin]{\mbox{}}\makebox[\linewidth+\leftmargin-1ex][l]{\bf #1}\\}{%
+	    \item[{\makebox[\linewidth+\leftmargin-1ex][l]{#1}}]}}
+\def\predatt#1{\hfill{\it\footnotesize[#1]}}
+\def\predicate{\@ifnextchar[{\@attpredicate}{\@predicate}}
+\def\qpredicate{\@ifnextchar[{\@attqpredicate}{\@qpredicate}}
+\def\@predicate#1#2#3{%
+	\ifthenelse{\equal{#2}{0}}{%
+	    \defentry{#1}}{%
+	    \defentry{#1({\it #3})}}%
+	\index{#1/#2}\ignorespaces}
+\def\@attpredicate[#1]#2#3#4{%
+	\ifthenelse{\equal{#3}{0}}{%
+	    \defentry{#2\predatt{#1}}}{%
+	    \defentry{#2({\it #4})\predatt{#1}}}%
+	\index{#2/#3}\ignorespaces}
+\def\@qpredicate#1#2#3#4{%
+	\ifthenelse{\equal{#3}{0}}{%
+	    \defentry{#1:#2}}{%
+	    \defentry{#1:#2({\it #4})}}%
+	\index{#1/#2}\ignorespaces}
+\def\@attqpredicate[#1]#2#3#4#5{%
+	\ifthenelse{\equal{#4}{0}}{%
+	    \defentry{#2:#3\predatt{#1}}}{%
+	    \defentry{#2:#3({\it #5})\predatt{#1}}}%
+	\index{#2/#3}\ignorespaces}
+
+\newcommand{\errorterm}[2]{\mbox{\tt%
+	\ifthenelse{\equal{}{#2}}{%
+	    error(#1, _)}{%
+	    error(#1(#2), _)}}}
+\newcommand{\termitem}[2]{%
+	\ifthenelse{\equal{}{#2}}{%
+	    \definition{#1}}{%
+	    \definition{#1({\it #2})}}\ignorespaces}
+\makeatother
+
+\begin{abstract}
+empty
+\end{abstract}
+
+%\tableofcontents
+
+%================================================================
+\section{Introduction}
+\label{sec:intro}
+
+%================================================================
+\subsection*{Acknowledgements}
+
+
+\bibliographystyle{plain}
+\bibliography{quasiquoting}
+
+\egroup
+
+\end{document}
+
+
