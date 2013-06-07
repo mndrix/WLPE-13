@@ -104,7 +104,22 @@
 \makeatother
 
 \begin{abstract}
-empty
+Prolog's support for dynamic programing, meta programming and text
+processing using context free grammars make the language highly suitable
+for defining \textit{domain specific languages} (DSL) as well as
+analysing, refactoring or generating expressions states in other
+(programming) languages. Well known DSLs are the DCG (Definite Clause
+Grammar) notation and constraint languages such as CHR. These extensions
+use Prolog operator declarations and the \mbox{\{\ldots\}} notation to
+realise a good syntax. When external languages, such as HTML, SQL or
+JavaScript enter the picture, operators no longer satisfy for embedding
+snippets of these languages into a Prolog source file.  In addition,
+Prolog has poor support for quoting long text fragments.
+
+Haskell introduced \textit{quasi quotations} to resolve this problem.
+In this paper we `ported' the Haskell mechanism for quasi quoting to
+Prolog.  We show that this can be done cleanly and that quasi quoting
+can solve the above mentioned problems.
 \end{abstract}
 
 %\tableofcontents
@@ -112,6 +127,276 @@ empty
 %================================================================
 \section{Introduction}
 \label{sec:intro}
+
+Prolog is commonly used for tasks where it needs to manage snippets of
+code written in the syntax of an external language such as HTML, SQL or
+JavaScript. The syntax languages cannot be turned onto valid Prolog
+syntax for various reasons \cite{WLPE/Wielemaker/2012}:
+
+\begin{itemize}
+    \item
+Using operator syntax, both only prefix, infix and postfix
+operators are insufficient.  For example, consider the JavaScript
+case statement.
+    \item
+Basic lexical primitives are incompatible.   For example, consider textual
+content in HTML documents.
+    \item
+The Prolog term that results from parsing an expression is
+insufficient for recovering the intend in the target language.
+For example, consider identifier names that start with an uppercase
+letter, which will read as a Prolog variable.
+\end{itemize}
+
+In \cite{WLPE/Wielemaker/2012}, we claim that some simple language can
+be covered well using these techniques, while it is possible to realise
+acceptable representations e.g., XML based languages by using a Prolog
+syntax that carries the (simple) datamodel of the language and others
+(e.g. SQL) can be supported partially using semantic transformations. In
+the above paper we propose a number of syntactic extensions to broaden
+the range of languages that can be supported using one of the above
+means.
+
+In this paper, we propose a solution for complex external languages for
+which none of the above is applicable. The solution is called quasi
+quoting and borrowed from Haskell. A Haskell quasi quote consists of a
+function symbol and quoted text. The function can manipulate the text
+and massage it to fit further processing by Haskell. It is good practice
+for the function to create an abstract syntax tree by parsing the text
+according to the rules of the external language. As we will see in this
+paper, more lightweight approaches can also be sufficient.
+
+This paper is organised as follows. First, we revisit the problem
+statement and indicate why current support in Prolog is insufficient to
+solve this in an acceptable way. In \secref{quasiquote} we introduce the
+notion of quasi quoting and how it fits into managing strings that
+present datastructures in other languages. In \secref{plqq}, we
+introduce the concrete solution proposed for SWI-Prolog.  This is
+followed by examples and a conclusion.
+
+
+\section{The need to integrate external languages in Prolog}
+
+We will explain this need by an example from SWI-Prolog's web page
+generating facilities \cite{TPLP06}. Web pages are by no means the only
+place where these problems arise \cite{DBLP:conf/haskell/2007}, but the
+domain is quite familar to many programmers and is of particular
+interest to us because generating web pages is an important application
+area for SWI-Prolog. A modern web page typically consists of HTML that
+creates the initial DOM structure, CSS that provides styling and
+JavaScript for creating interactive components. Our solution for
+generating HTML is similar to PiLLoW \cite{PiLLoW} and based on
+representing the HTML DOM structure as a nested Prolog term.  The
+SWI-Prolog HTML page generation library has matured and provides
+good solutions for
+
+\begin{itemize}
+    \item Generating the page structure.
+    \item Definition and reuse of DCGs that generate page fragments.
+    \item Create references (URLs) to other pages on the server.
+    \item Modular inclusion of resources, such as style and
+          JavaScript files including dependency tracking and
+	  automatic ordering by computing a partial order based
+	  on the dependencies.
+\end{itemize}
+
+Pages generated with this infrastructure are guaranteed to be
+syntactically correct, regardless of the data from which the
+page is created.  This built-in protection against injection
+attacks is considered a key asset of the server infrastructure.
+
+In ealier publications \cite{WLPE/Wielemaker/2012,TPLP06} we already
+identified two missing pieces: (1) longer (HTML) text fragments and (2)
+JavaScript fragments. The first problem can be solved using
+PWP\footnote{Prolog Well-formed Pages,
+\url{http://www.swi-prolog.org/pldoc/package/sgml.html}}, which is the
+opposite of the above described Prolog based page generator. The page is
+described in XML and reserved XML elements and tags trigger the
+generation of dynamic page components based on the evaluation of Prolog
+goals. Like the Prolog page generator, PWP protects against injection
+attacks because it considers solutions from Prolog as data that is
+included into the XML DOM prior to generating the page. PWP simplifies
+the specification of pages with large amounts of text, but the rule
+format is less natural and it lacks the modularity of the Prolog based
+generator.
+
+We have been struggling with JavaScript using various approaches.
+Currently, there is a large number of JavaScript frameworks that provide
+`widgets' for use on web pages. Popular examples are YUI and jQuery,
+optionally combined with Bootstrap. Including these widgets typically
+demands creating some a DOM structure that carries an \verb$id$
+attribute and represents the data (e.g., a menu may be represented as a
+\verb$ul$ list or an advanced text editor can be represented as a
+\verb$textarea$). This DOM element is transformed into the target web
+element by calling a JavaScript initialization function that modifies
+the DOM of the target element and installs \textit{event handlers} that
+provide the dynamic behavior of the element. The initialization function
+typically requests a \textit{configuration} object (a JavaScript object
+literal, \mbox{\{name:value, \ldots\}}), where some of the values are
+\textit{callback functions}, represented as JavaScript Lambda functions.
+
+The HTML framework is well equipped to create the initial DOM and pull
+in the JavaScript and CSS resources using its dependency framework. The
+initialization call is easy enough to abstract, except when the
+configuration object contains Lambda functions. These are often required
+to massage the data into the desired vizualization and support AJAX
+based operations, such as computing autocompletion candidates. It is
+quite common for such objects to require dozens of lines of JavaScript.
+Representing JavaScript Lambda functions requires support for the the
+complete complexity of the language. One way to do this is to represent
+the JavaScript fragment as a list of literals, mixed with DCG rules that
+insert content generated from Prolog, such as URLs or JavaScript literal
+objects. This leads to code as below, which we consider hard to type,
+hard to read and because it is so hard to read, often subject to syntax
+errors. Finally, the code below is subject to injection attacks, unless
+we hand the variables \arg{URL} and \arg{Id} to a grammar that generates
+valid JavaScript string content.
+
+\begin{code}
+	[ '$.ajax({ url: "',URL,'",\n\c',
+	  '	    data: { id: "',Id,'",\n\c',
+          '               }\n\c',
+          '       });\n'
+	]
+\end{code}
+
+We tried several designs to improve on the above, none of which we
+considered satisfactory. Below are the main directions that we tried.
+
+\begin{itemize}
+    \item Abstract away.  This implies using the HTML page generation
+          facilities to generate e.g., make a JavaScript call,
+	  initialize a variable from Prolog data, etc.  To remain
+	  managable, a fairly high level of abstraction is needed
+	  that is geared towards the JavaScript framework.  This is
+	  problematic because it makes it hard for the programmer to
+	  relate the JavaScript examples from the framework
+	  documentation to the Prolog code.  Although it is possible
+	  to abstract some of the Lambda functions, the variation is
+	  too big to deal with all of them.
+    \item Put the JavaScript in a separate file.  This creates many
+          short files that typically only support a specific generated
+	  HTML page because the details of the required JavaScript, such
+	  as locations on the server that must be addressed vary from
+	  page to page.  Because there is no formal relation between
+	  the two pages, it is hard to relate them and keep them in
+	  sync.
+    \item Create application specific JavaScript resources that can be
+	  configured without the need for Lambda functions in the their
+	  configuration object. The problem here is that you create your
+	  own refinement of the external widget library that requires
+	  understanding and documentation, while the externally provided
+	  libraries are already quite high level.  In other words, the
+	  newly created layer adds mostly confusion.
+\end{itemize}
+
+We have come to the conclusion that (1) we need a mechanism that allows
+us to include JavaScript into the Prolog page generation source code
+because putting the relatively short fragments in a separate file while
+the Prolog and JavaScript file are highly dependent is not managable,
+(2) The representation of JavaScript in the Prolog source must be easy
+to type and understand and (3) the generated JavaScript should be
+saveguarded against injection attacks without the need for user
+involvement and (4) syntactic validation of the generated fragments are
+likely to improve productivity.
+
+
+\section{Using Prolog syntax}
+
+First, we investigated to what extend the extensions proposed in
+\cite{WLPE/Wielemaker/2012} would help. We realised support for the
+empty argument lists (e.g., \verb$name()$), array notation and function
+bodies using \mbox{\{\ldots\}}. These were resolved after a proposal by
+Jose Morales, which extends the notion of operators to lists and
+curly-bracket blocks. In addition to our hope of improving JavaScript
+support, list subscription and curly-bracket attribute lists are in use
+with B-Prolog and ECLiPSe for realizing enhanced DSL support.
+
+We have realised a prototype that can express a fair deal of the
+JavaScript syntax with the following problems:
+
+\begin{itemize}
+    \item It requires ! and . to be defined as operators.  These
+          operators are known to cause ambiguity issues.
+    \item Quoting of identifiers may be needed (e.g., \verb$'String'(...)$)
+    \item A special symbol is needed to distinguish identifiers from strings.
+          ("string" cannot be used because it is a list of integers).
+    \item Restictions are needed with regard to spaces.  No space is
+          allowed after function symbols and keywords such as
+	  \const{while}.  In some places additional spaces are required
+	  to prevent Prolog from reading two JavaScript tokens as a
+	  single Prolog token.
+    \item Some symbols clash with Prolog.  Consider \chr{|} or \chr{%}.
+    \item Some terms cannot be classified properly.  For example,
+          \verb$++a$ is different from \verb$a++$, but both result in
+	  the Prolog term ++(a).
+\end{itemize}
+
+We believe that the result would have been more usable than using Prolog
+quoted atoms for short (1-10 lines) JavaScript snippets, that include
+simple Lambda functions such as making AJAX callbacks. Our main point of
+doubt is that it is hard to convey the restrictions to casual Prolog
+users, which makes it likely to get surprised by output that differs
+from the expectations and can only be understood by deep knowledge of
+Prolog's syntax and underlying term representation.
+
+\section{The two problems}
+
+If we cannot include JavaScript using (operator extended) Prolog syntax,
+the only remaining option is to use (quoted) text.  For this, we need to
+solve three orthogonal problems:
+
+\begin{enumerate}
+    \item Allow for long quoted text.  Current (ISO) Prolog only provides
+    single and double quoted text, which follow the same rules. In
+    particular
+
+    \begin{itemize}
+        \item Quoted text cannot span more than one line, unless the
+	      newline is escaped with a backslash.
+        \item The backslash and quote must be escaped.
+	\item If good layout of the output is desirable, there is
+	      no way to indent continuation lines in the Prolog source
+	      such that the indentation does not show up in the output.
+    \end{itemize}
+
+    These restrictions are unsuitable for embedding many programming
+    languages.
+
+    \item Establish a safe way to embed data into the template string.
+
+    \item Relate Prolog variables (data) to references in the quoted
+    material.
+\end{enumerate}
+
+
+\section{Quasi Quotations}
+
+Quasi quotations find their origin in
+linguistics\footnote{\url{http://en.wikipedia.org/wiki/Quasi-quotation}}
+and introduces \textit{variables} into textual expressions. They are
+commonly used in \textit{scripting} languages. For example:
+
+\begin{code}
+a=world; echo "Hello $a"	// Unix shell
+$a = "world"; print "Hello $a"; // Perl
+\end{code}
+
+While this approach feels very natural to the novice programmer, it
+carries a serious risc. When used for generating a serialization for a
+(programming) language, simple text inclusion easily leads to
+\textit{injection} attacks TBD: citation needed.
+
+Therefore
+
+
+
+
+
+
+
+
+
 
 %================================================================
 \subsection*{Acknowledgements}
