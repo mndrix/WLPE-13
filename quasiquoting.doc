@@ -27,8 +27,10 @@
 \makeatletter
 %\newcommand{\TBD}[1]{\textbf{#1}}
 
+\newcommand{\jargon}[1]{{\em #1}}
 \newcommand{\reffont}{\tt}
 \newcommand{\predref}[2]{{\bf #1/#2}}
+\newcommand{\dcgref}[2]{\mbox{\reffont #1//#2}}
 \newenvironment{itemlist}
   {\itemize
    \renewcommand\makelabel[1]{%
@@ -49,6 +51,7 @@
 \newcommand{\const}[1]{{\tt #1}}
 \renewcommand{\arg}[1]{\ifmmode\mbox{\em #1}\else{\it #1}\fi}
 \newcommand{\secref}[1]{section~\ref{sec:#1}}
+\newcommand{\figref}[1]{figure~\ref{fig:#1}}
 \def\term{}
 \renewcommand{\term}[2]{%
 	\ifthenelse{\equal{\protect}{\protect#2}}{%
@@ -101,6 +104,12 @@
 	\ifthenelse{\equal{}{#2}}{%
 	    \definition{#1}}{%
 	    \definition{#1({\it #2})}}\ignorespaces}
+
+\newcommand\satom{\begingroup \urlstyle{tt}\Url}
+\newcommand{\chr}[1]{{\tt #1}}
+\urldef{\Sbar}\satom{|}			% |
+\urldef{\Spercent}\satom{%}		% %
+\urldef{\Scut}\satom{!}			% !
 \makeatother
 
 \begin{abstract}
@@ -253,9 +262,9 @@ we hand the variables \arg{URL} and \arg{Id} to a grammar that generates
 valid JavaScript string content.
 
 \begin{code}
-	[ '$.ajax({ url: "',URL,'",\n\c',
-	  '	    data: { id: "',Id,'",\n\c',
-          '               }\n\c',
+	[ '$.ajax({ url: "',URL,'",\n',
+	  '	    data: { id: "',Id,'",\n',
+          '               }\n',
           '       });\n'
 	]
 \end{code}
@@ -302,6 +311,7 @@ likely to improve productivity.
 
 
 \section{Using Prolog syntax}
+\label{sec:syntaxext}
 
 First, we investigated to what extend the extensions proposed in
 \cite{WLPE/Wielemaker/2012} would help. We realised support for the
@@ -340,11 +350,12 @@ users, which makes it likely to get surprised by output that differs
 from the expectations and can only be understood by deep knowledge of
 Prolog's syntax and underlying term representation.
 
-\section{The two problems}
+\section{The three problems}
+\label{sec:thebigthree}
 
 If we cannot include JavaScript using (operator extended) Prolog syntax,
-the only remaining option is to use (quoted) text.  For this, we need to
-solve three orthogonal problems:
+the other option is to use (quoted) text. For this, we need to solve
+three orthogonal problems:
 
 \begin{enumerate}
     \item Allow for long quoted text.  Current (ISO) Prolog only provides
@@ -363,11 +374,41 @@ solve three orthogonal problems:
     These restrictions are unsuitable for embedding many programming
     languages.
 
-    \item Establish a safe way to embed data into the template string.
-
     \item Relate Prolog variables (data) to references in the quoted
     material.
+
+    \item Establish a safe way to embed data into the template string.
 \end{enumerate}
+
+These problems are independent.  We illustrate this with a small HTML
+example that presents a page with the current time.  We use an HTML
+skeleton to make the comparison fair.  In pure Prolog, this could be
+achieved using the following code snippet:
+
+\begin{code}
+	...,
+	get_time(Now),
+	format_time(atom(Date), '%+', Now),
+	print_html([date=Date],
+		   '<h1>My digital clock</h1>\n\
+		    <p>It is now {{date}}</p>').
+\end{code}
+
+The task of print_html/2 is to relate the template variable \const{date}
+to the Prolog variable \arg{Date} (third item above), determine the
+lexical context of \mbox{\{\{date\}\}} to know the proper encoding that
+needs to be done, realise this encoding on the Prolog atom and create
+the proper output string. This is the second item on the list above.
+Ideally, we would like an error if the HTML fragment is malformed to
+begin with.
+
+In pure ISO Prolog, all work must be done at runtime. Many Prolog
+systems provide goal_expansion/2 or similar, which allows for doing the
+analysis of the template at compile time. What remains on our wishlist
+is to (1) get rid of \verb$[date=Date]$ and (2) get rid of complicated
+escape sequences for languages that frequently use quotes or
+backslashes. We propose to solve both issues using quasi quotations for
+Prolog.
 
 
 \section{Quasi Quotations}
@@ -382,12 +423,207 @@ a=world; echo "Hello $a"	// Unix shell
 $a = "world"; print "Hello $a"; // Perl
 \end{code}
 
-While this approach feels very natural to the novice programmer, it
-carries a serious risc. When used for generating a serialization for a
-(programming) language, simple text inclusion easily leads to
-\textit{injection} attacks TBD: citation needed.
+This approach feels natural to the (novice) programmer. Unfortunately it
+does not work for Prolog because nothing in Prolog the normal Prolog
+compilation process provides access to the names of variables. In
+addition, plain text insertion is a direct invitation to
+\textit{injection} attacks. As described in \secref{thebigthree}, the
+template replacement code must be aware of the syntax to perform a safe,
+i.e., properly escaped, insertion of the variable.
 
-Therefore
+Haskell quasi quotes resolve the injection problem (which is described
+as a \emph{typing} problem in \cite{DBLP:conf/haskell/2007}) by
+associating a \emph{function} directly with the quoted data. The
+function typically parses the quoted material into an abstract syntax
+tree that can represent the target language.
+
+
+\section{Quasi Quotations in Prolog}
+
+We can solve our three problems by adding a syntactic construct that (1)
+provides long quoted strings, (2) associates the quoted material to a
+predicate that can act on it according to the requirements of processing
+the external language and (3) provides access the the clause's variable
+dictionary.
+
+A solution for (1) that fits the spirit of Prolog is the triple quote
+(\verb$"""..."""$) using by e.g., Python and Turtle. This options is not
+possible because \verb$""$ is the string escape for \verb$"$ and
+therefore \verb$"""$ is the legal start of a Prolog string. The Ruby
+language has a particularly large set of string escape
+languages\footnote{\url{http://en.wikibooks.org/wiki/Ruby_Programming/Syntax/Literals}},
+none of which seems promising in the context of Prolog. The fact that
+Prolog symbol characters glue together and that sequences of symbol
+characters, singletons (e.g., !, and \chr{|}) can be used as operators
+limit the options. New syntax for Prolog should generally consider using
+two consequtive tokens that cannot be operators. With our extended
+operators (\secref{syntaxext}), that only leaves variables, numbers and
+double quoted strings. One option could be a triple quoted string
+prefixed or postfixed with a variable, as shown below.  The downsite
+of this is that this may well be legal syntax with a different meaning
+if the \verb$L$ is forgotten.
+
+\begin{code}
+	L"""..."""
+\end{code}
+
+Instead of searching for long quoted syntax, we can also look at
+quotation marks that embed types. Here, we see the Haskell example of
+\verb$[type|quoted]$ and the XML example \verb$<![CDATA[quoted]]>$. The
+XML example is particularly interesting because the \chr{!} is a poor
+choice for an
+operator\footnote{\url{http://comments.gmane.org/gmane.comp.lang.swi-prolog.general/5609}},
+while the remainder is not a valid Prolog list.  Following this, we
+propose the following syntax for Prolog quasi quotations, where
+\arg{Type} is an arbitrary callable Prolog term:
+
+\begin{code}
+	<![Type[Quoted]]>
+\end{code}
+
+Occurrences of \verb$]]>$ inside the quoted material must be resolved
+using alternatives or escape mechanisms of the quoted target language.
+For example the legal JavaScript expressions \verb$a[a[1]]>2$ can be
+quoted by introducing additional white space.\footnote{Example by
+Richard O'Keefe} If additional measures are needed, we propose
+considering alternative start- and end sequences for further
+considerations. For example, \verb$<!{Type{Quoted}}>$ or
+\verb$<!MAGIC[Type[Quoted]]MAGIC>$, where \arg{MAGIC} can be a
+user-defined sequence of uppercase letters.
+
+Orthogonal to the syntax is the mapping of this construct to a Prolog
+term.  This mapping is defined by the \arg{Type}.  At the same time,
+quasi quotation merges (Prolog) variables from the environment into
+the quoted material.  Therefore, we define that:
+
+\begin{itemize}
+    \item The predicate read/1 collects the \arg{Type} term and the
+          quoted text.
+    \item After all normal processing is finished, read/1 calls the
+	  term below.
+
+\begin{code}
+call(+TypeName, +Content, +TypeArgs, +VarDict, -Result)
+\end{code}
+
+	  Above, \arg{TypeName} is the functor of the \arg{Type} term
+	  and \arg{TypeArgs} is the list of arguments, i.e.,
+	  \verb$Type =.. [TypeName|TypeArgs]$.  In \secref{examples},
+	  we will see why it is useful to split the functor from the
+	  arguments.  \arg{Content} is an opaque handle to the quoted
+	  material as we will see later.  \arg{VarDict} is
+	  \mbox{\arg{Name} = \arg{Var}} list conforming to read_term/3
+	  and write_term/3.  \arg{Result} is determined by the call to
+	  the deterministic predicate \arg{TypeName}/4.
+\end{itemize}
+
+We provide two support predicates for \arg{TypeName}/4 to process the
+result.  Note that there are no limits on how the called predicate
+combines the quoted text with the type arguments and variable dictionary
+to construct the final term.
+
+\begin{description}
+    \predicate{phrase_from_quasi_quotation}{2}{:Grammar, +Content}
+Calls the grammar \arg{Grammar} on the list formed by \arg{Content}.
+This predicate uses the \jargon{pure input} library described in
+\cite{CYCLOPS/Wielemaker/2008} to parse the content.  Syntax errors
+may be raised using the non-terminal syntax_error//1, which produces
+a precise syntax location that consists of the file, line number,
+line position and character count.
+
+    \predicate{with_quasi_quotation_input}{3}{+Content, -Stream, :Goal}
+Calls \arg{Goal} on the Prolog stream \arg{Stream}.  The stream position
+information reflects the location in the source file, except for the
+byte count.
+\end{description}
+
+
+\section{Examples of using quasi quotes in Prolog}
+\label{sec:examples}
+
+In this section we provide some examples to illustrate the power of
+these facilities. The first, complete, example illustrates safe
+embedding of long HTML texts in a Prolog web page.  The code of
+the quasi quoter is given in \figref{htmlqq}.  First, we give a
+fully working webserver based on this quasi quoter:
+
+\begin{code}
+:- use_module(library(http/thread_httpd)).
+:- use_module(library(http/http_dispatch)).
+:- use_module(library(http/html_write)).
+
+server(Port) :- http_server(http_dispatch, [port(Port)]).
+
+:- http_handler(/, index, []).
+
+index(_Request) :-
+	get_time(Now),
+	format_time(atom(Date), '%+', Now),
+	reply_html_page(
+	    title('My digital clock'),
+	    <![html(Date)
+	       [<h1>My digital clock</h1>
+
+		<p>It is now <span class="time">Date</span>
+	       ]]>).
+\end{code}
+
+
+
+
+
+
+\begin{figure}
+\begin{code}
+:- module(html_quasi_quotations, [ html/4 ]).
+:- use_module(library(sgml)).
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(quasi_quotations)).
+
+:- quasi_quotation_syntax(html).
+
+html(Content, Vars, Dict, DOM) :-
+	include(qq_var(Vars), Dict, QQDict),
+	with_quasi_quotation_input(
+	    Content, In,
+	    load_html(In, DOM0,
+		      [ max_errors(0)
+		      ])),
+	xml_content(QQDict, DOM0, DOM).
+
+qq_var(Vars, _=Var) :- member(V, Vars), V == Var, !.
+
+xml_content(Dict, [Name], [Var]) :-
+	atom(Name),
+	memberchk(Name=Var, Dict), !.
+xml_content(Dict, Content0, Content) :-
+	maplist(xml_content_element(Dict), Content0, Content).
+
+xml_content_element(Dict,
+		    element(Tag, Attrs0, Content0),
+		    element(Tag, Attrs, Content)) :- !,
+	maplist(xml_attribute(Dict), Attrs0, Attrs),
+	xml_content(Dict, Content0, Content).
+xml_content_element(_, Element, Element).
+
+xml_attribute(Dict, Attr=Name, Attr=Var) :-
+	memberchk(Name=Var, Dict), !.
+xml_attribute(_, Attr, Attr).
+\end{code}
+    \caption{Source for the HTML quasi quoter}
+    \label{fig:htmlqq}
+\end{figure}
+
+
+
+
+
+
+
+
+
+
 
 
 
