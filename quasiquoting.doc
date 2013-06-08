@@ -141,8 +141,8 @@ can solve the above mentioned problems.
 
 Prolog is commonly used for tasks where it needs to manage snippets of
 code written in the syntax of an external language such as HTML, SQL or
-JavaScript. The syntax languages cannot be turned onto valid Prolog
-syntax for various reasons \cite{WLPE/Wielemaker/2012}:
+JavaScript. The syntax of these languages cannot be turned onto valid
+Prolog syntax for various reasons \cite{WLPE/Wielemaker/2012}:
 
 \begin{itemize}
     \item
@@ -160,34 +160,40 @@ letter, which will read as a Prolog variable.
 \end{itemize}
 
 In \cite{WLPE/Wielemaker/2012}, we claim that some simple languages can
-be covered well using these techniques, while it is possible to realise
-acceptable representations e.g., XML based languages by using a Prolog
-syntax that carries the (simple) data model of the language and others
-(e.g. SQL) can be supported partially using semantic transformations,
-i.e., calls to Prolog predicates are translated into SQL queries
-\cite{Draxler91}. In the above paper (\cite{WLPE/Wielemaker/2012}), we propose
-a number of syntactic extensions to broaden the range of languages that
+be covered well by tweaking the Prolog syntax using operators, while it
+is possible to realise acceptable representations for e.g., XML based
+languages by using a Prolog syntax to represent the (simple) data model
+of these language. In other cases, integration of external languages can
+be supported partially using semantic transformations. For example,
+calls to Prolog predicates whose functor matches a table in an RDBMS and
+whose arity matches the number of columns can be translated into SQL
+queries \cite{Draxler91}. In \cite{WLPE/Wielemaker/2012}, we propose a
+number of syntactic extensions to broaden the range of languages that
 can be supported using one of the above means.
 
 In this paper, we propose a solution for complex external languages for
-which none of the above is applicable. The solution is called quasi
-quoting and borrowed from Haskell. A Haskell quasi quotation consists of
-a function symbol and quoted text. The function can manipulate the text
+which none of the above achieves a satisfactory integration. The
+solution is called \jargon{quasi quotations}, where we borrow the
+integration into the language from Haskell
+\cite{DBLP:conf/haskell/2007}. A Haskell quasi quotation consists of a
+function symbol and quoted text. The function can manipulate the text
 and massage it to fit further processing by Haskell. It is good practice
 for the function to create an abstract syntax tree by parsing the text
 according to the rules of the external language. As we will see in this
 paper, more lightweight approaches can also be sufficient.
 
 This paper is organised as follows. First, we revisit the problem
-statement and indicate why current support in Prolog is insufficient to
-solve this in an acceptable way. In \secref{quasiquote} we introduce the
-notion of quasi quoting and how it fits into managing strings that
-present data structures in other languages. In \secref{plqq}, we
-introduce the concrete solution proposed for SWI-Prolog.  This is
-followed by examples and a conclusion.
+statement and describe why current support in Prolog is insufficient to
+solve this problem in an satisfactory way. In \secref{quasiquote} we
+introduce the notion of quasi quoting and how it fits into managing
+strings that present data structures from other languages. In
+\secref{plqq}, we introduce the concrete solution proposed for
+SWI-Prolog. This is followed by examples, related work, future work and
+the conclusions.
 
 
 \section{The need to integrate external languages in Prolog}
+\label{sec:needqq}
 
 We will explain this need by an example from SWI-Prolog's web page
 generating facilities \cite{TPLP06}. Web pages are by no means the only
@@ -213,56 +219,60 @@ good solutions for
 \end{itemize}
 
 Pages generated with this infrastructure are guaranteed to be
-syntactically correct, regardless of the data from which the
-page is created.  This built-in protection against injection
-attacks is considered a key asset of the server infrastructure.
+syntactically correct, regardless of the data from which the page is
+created. This built-in protection against injection attacks is
+considered a key asset of the server infrastructure and a property that
+we wish to maintain when integrating JavaScript into the page.
 
 In earlier publications \cite{WLPE/Wielemaker/2012,TPLP06} we already
 identified two missing pieces: (1) longer (HTML) text fragments and (2)
 JavaScript fragments. The first problem can be solved using
 PWP\footnote{Prolog Well-formed Pages,
-\url{http://www.swi-prolog.org/pldoc/package/sgml.html}}, which is the
-opposite of the above described Prolog based page generator. The page is
-described in XML and reserved XML elements and tags trigger the
-generation of dynamic page components based on the evaluation of Prolog
-goals. Like the Prolog page generator, PWP protects against injection
-attacks because it considers solutions from Prolog as data that is
-included into the XML DOM prior to generating the page. PWP simplifies
-the specification of pages with large amounts of text, but the rule
-format is less natural and it lacks the modularity of the Prolog based
-generator.
+\url{http://www.swi-prolog.org/pldoc/package/sgml.html}}. PWP was
+developed by Richard O'Keefe and can be considered the opposite of the
+above described Prolog based page generator. The page is described in
+XML and reserved XML elements and tags trigger the generation of dynamic
+page components based on the evaluation of Prolog goals. Like the Prolog
+page generator, PWP protects against injection attacks because it
+considers solutions from Prolog as data that is included into the XML
+DOM prior to generating the page. PWP simplifies the specification of
+pages with large amounts of text, but the rule format is less natural
+and it lacks the modularity of the Prolog based generator.
 
-We have been struggling with JavaScript using various approaches.
-Currently, there is a large number of JavaScript frameworks that provide
-`widgets' for use on web pages. Popular examples are YUI and jQuery,
-optionally combined with Bootstrap. Including these widgets typically
-demands creating some a DOM structure that carries an \verb$id$
-attribute and represents the data (e.g., a menu may be represented as a
-\verb$ul$ list or an advanced text editor can be represented as a
-\verb$textarea$). This DOM element is transformed into the target web
-element by calling a JavaScript initialisation function that modifies
-the DOM of the target element and installs \textit{event handlers} that
-provide the dynamic behavior of the element. The initialisation function
-typically requests a \textit{configuration} object (a JavaScript object
-literal, \mbox{\{name:value, \ldots\}}), where some of the values are
-\textit{callback functions}, represented as JavaScript Lambda functions.
+We have been struggling with JavaScript, trying various approaches.
+Currently, there are a large number of JavaScript frameworks that
+provide `widgets' for use on web pages. Popular examples are
+YUI\footnote{\url{http://yuilibrary.com/}} and
+jQuery\footnote{\url{http://jquery.com/}}. Including these widgets
+typically demands creating some a DOM structure that carries an
+\verb$id$ attribute and represents the data (e.g., a menu may be
+represented as a \verb$ul$ list or an advanced text editor can be
+represented as a \verb$textarea$). This DOM element is transformed into
+the target widget by calling a JavaScript initialisation function that
+modifies the DOM of the target element and installs \textit{event
+handlers} that provide the dynamic behavior of the element. The
+initialisation function often takes a \textit{configuration} object (a
+JavaScript \jargon{object literal}, \mbox{\{name:value, \ldots\}}),
+where some of the values are \textit{callback functions}, represented as
+JavaScript Lambda functions.
 
 The HTML framework is well equipped to create the initial DOM and pull
 in the JavaScript and CSS resources using its dependency framework. The
 initialisation call is easy enough to abstract, except when the
 configuration object contains Lambda functions. These are often required
-to massage the data into the desired visualisation and support AJAX
-based operations, such as computing auto-completion candidates. It is
-quite common for such objects to require dozens of lines of JavaScript.
-Representing JavaScript Lambda functions requires support for the the
-complete complexity of the language. One way to do this is to represent
-the JavaScript fragment as a list of literals, mixed with DCG rules that
-insert content generated from Prolog, such as URLs or JavaScript literal
-objects. This leads to code as below, which we consider hard to type,
-hard to read and because it is so hard to read, often subject to syntax
-errors. Finally, the code below is subject to injection attacks, unless
-we hand the variables \arg{URL} and \arg{Id} to a grammar that generates
-valid JavaScript string content.
+to massage JSON data from the server into the desired visualisation and
+support AJAX based operations, such as computing auto-completion
+candidates. It is quite common for such objects to require dozens of
+lines of JavaScript. Representing JavaScript Lambda functions requires
+support for the complete complexity of the language. One way to do
+this is to represent the JavaScript fragment as a list of literals,
+mixed with DCG rules that insert content generated from Prolog, such as
+URLs or JavaScript literal objects. This leads to code as below, which
+we consider hard to type, hard to read and because it is so hard to
+read, often subject to syntax errors. Finally, the code below is subject
+to injection attacks, unless we hand the variables \arg{URL} and
+\arg{Id} to a grammar that generates valid JavaScript string content
+regardless of the text in the Prolog atom.
 
 \begin{code}
 	[ '$.ajax({ url: "',URL,'",\n',
@@ -280,12 +290,12 @@ considered satisfactory. Below are the main directions that we tried.
           facilities to generate e.g., make a JavaScript call,
 	  initialize a variable from Prolog data, etc.  To remain
 	  managable, a fairly high level of abstraction is needed
-	  that is geared towards the JavaScript framework.  This is
+	  that is geared towards the JavaScript framework used.  This is
 	  problematic because it makes it hard for the programmer to
 	  relate the JavaScript examples from the framework
 	  documentation to the Prolog code.  Although it is possible
-	  to abstract some of the Lambda functions, the variation is
-	  too big to deal with all of them.
+	  to abstract some of the Lambda functions, there is
+	  too much variation to deal with all of them.
     \item Put the JavaScript in a separate file.  This creates many
           short files that typically only support a specific generated
 	  HTML page because the details of the required JavaScript, such
@@ -295,18 +305,20 @@ considered satisfactory. Below are the main directions that we tried.
 	  sync.
     \item Create application specific JavaScript resources that can be
 	  configured without the need for Lambda functions in the their
-	  configuration object. The problem here is that you create your
-	  own refinement of the external widget library that requires
-	  understanding and documentation, while the externally provided
-	  libraries are already quite high level.  In other words, the
-	  newly created layer adds mostly confusion.
+	  configuration object. The problem here is that the
+	  application developers create their own refinement of the
+	  external widget library that requires understanding and
+	  documentation, while the externally provided libraries are
+	  already quite high level. In other words, the newly created
+	  layer adds mostly additional complication for managing and
+	  understanding the code.
 \end{itemize}
 
 We have come to the conclusion that (1) we need a mechanism that allows
-us to include JavaScript into the Prolog page generation source code
+for including JavaScript into the Prolog page generation source code
 because putting the relatively short fragments in a separate file while
 the Prolog and JavaScript file are highly dependent is not managable,
-(2) The representation of JavaScript in the Prolog source must be easy
+(2) the representation of JavaScript in the Prolog source must be easy
 to type and understand and (3) the generated JavaScript should be
 saveguarded against injection attacks without the need for user
 involvement and (4) syntactic validation of the generated fragments are
@@ -334,12 +346,13 @@ JavaScript syntax with the following problems:
     \item Quoting of identifiers may be needed (e.g., \verb$'String'(...)$)
     \item A special symbol is needed to distinguish identifiers from strings.
           ("string" cannot be used because it is a list of integers).
-    \item Restictions are needed with regard to spaces.  No space is
+    \item Restrictions are needed with regard to spaces.  No space is
           allowed after function symbols and keywords such as
 	  \const{while}.  In some places additional spaces are required
 	  to prevent Prolog from reading two JavaScript tokens as a
 	  single Prolog token.
-    \item Some symbols clash with Prolog.  Consider \chr{|} or \chr{%}.
+    \item Some symbols clash with Prolog.  Consider \chr{|} or \chr{%},
+          which play a totally different role in the Prolog syntax.
     \item Some terms cannot be classified properly.  For example,
           \verb$++a$ is different from \verb$a++$, but both result in
 	  the Prolog term ++(a).
@@ -347,11 +360,11 @@ JavaScript syntax with the following problems:
 
 We believe that the result would have been more usable than using Prolog
 quoted atoms for short (1-10 lines) JavaScript snippets, that include
-simple Lambda functions such as making AJAX callbacks. Our main point of
-doubt is that it is hard to convey the restrictions to casual Prolog
-users, which makes it likely to get surprised by output that differs
-from the expectations and can only be understood by deep knowledge of
-Prolog's syntax and underlying term representation.
+simple Lambda functions such as making trivial AJAX callbacks. Our main
+point of doubt is that it is hard to convey the restrictions to casual
+Prolog users, which makes it likely to get surprised by output that
+differs from the expectations and can only be understood through deep
+knowledge of Prolog's syntax and underlying term representation.
 
 \section{The three problems}
 \label{sec:thebigthree}
@@ -368,19 +381,21 @@ three orthogonal problems:
     \begin{itemize}
         \item Quoted text cannot span more than one line, unless the
 	      newline is escaped with a backslash.
-        \item The backslash and quote must be escaped.
+        \item The backslash and quote must be escaped with a backslash.
 	\item If good layout of the output is desirable, there is
 	      no way to indent continuation lines in the Prolog source
 	      such that the indentation does not show up in the output.
     \end{itemize}
 
-    These restrictions are unsuitable for embedding many programming
-    languages.
+    With these restrictions, simple copy and paste of example code
+    must be followed by a tedious process of making the text fit the
+    Prolog syntax, while the reverse is needed to test the code, for
+    example in a JavaScript console.
 
     \item Relate Prolog variables (data) to references in the quoted
     material.
 
-    \item Establish a safe way to embed data into the template string.
+    \item Establish a \emph{safe} way to embed data into the template string.
 \end{enumerate}
 
 These problems are independent.  We illustrate this with a small HTML
@@ -427,8 +442,8 @@ a=world; echo "Hello $a"	// Unix shell
 $a = "world"; print "Hello $a"; // Perl
 \end{code}
 
-This approach feels natural to the (novice) programmer. Unfortunately it
-does not work for Prolog because nothing in Prolog the normal Prolog
+This approach is natural to the (novice) programmer. Unfortunately it
+does not work for Prolog because nothing in the normal Prolog
 compilation process provides access to the names of variables. In
 addition, plain text insertion is a direct invitation to
 \textit{injection} attacks. As described in \secref{thebigthree}, the
@@ -446,7 +461,7 @@ tree that can represent the target language.
 \label{sec:plqq}
 
 We can solve our three problems by adding a syntactic construct that (1)
-provides long quoted strings, (2) associates the quoted material to a
+provides long quoted strings, (2) associates the quotation to a
 predicate that can act on it according to the requirements of processing
 the external language and (3) provides access the the clause's variable
 dictionary.
@@ -473,56 +488,56 @@ if the \verb$L$ is forgotten.
 \end{code}
 
 Instead of searching for long quoted syntax, we can also look at
-quotation marks that embed types. Here, we see the Haskell example of
-\verb$[type|quoted]$ and the XML example \verb$<![CDATA[quoted]]>$. The
-XML example is particularly interesting because the \chr{!} is a poor
-choice for an
+quotation marks that embed a description of the content. Here, we see
+the Haskell example of \verb$[type|quoted]$ and the XML example
+\verb$<![CDATA[quoted]]>$. The XML example is particularly interesting
+because the \chr{!} is a poor choice for an
 operator\footnote{\url{http://comments.gmane.org/gmane.comp.lang.swi-prolog.general/5609}},
-while the remainder is not a valid Prolog list.  Following this, we
+while the remainder is not a valid Prolog list. Following this, we
 propose the following syntax for Prolog quasi quotations, where
-\arg{Type} is an arbitrary callable Prolog term:
+\arg{Syntax} is an arbitrary (callable) Prolog term:
 
 \begin{code}
-	<![Type[Quoted]]>
+	<![Syntax[Quoted]]>
 \end{code}
 
 Occurrences of \verb$]]>$ inside the quoted material must be resolved
-using alternatives or escape mechanisms of the quoted target language.
+using alternatives or escape mechanisms of the embedded target language.
 For example the legal JavaScript expressions \verb$a[a[1]]>2$ can be
 quoted by introducing additional white space.\footnote{Example by
 Richard O'Keefe} If additional measures are needed, we propose
 considering alternative start- and end sequences for further
-considerations. For example, \verb$<!{Type{Quoted}}>$ or
-\verb$<!MAGIC[Type[Quoted]]MAGIC>$, where \arg{MAGIC} can be a
+considerations. For example, \verb$<!{Syntax{Quoted}}>$ or
+\verb$<!MAGIC[Syntax[Quoted]]MAGIC>$, where \arg{MAGIC} can be a
 user-defined sequence of uppercase letters.
 
 Orthogonal to the syntax is the mapping of this construct to a Prolog
-term.  This mapping is defined by the \arg{Type}.  At the same time,
+term.  This mapping is defined by the \arg{Syntax}.  At the same time,
 quasi quotation merges (Prolog) variables from the environment into
 the quoted material.  Therefore, we define that:
 
 \begin{itemize}
-    \item The predicate read/1 collects the \arg{Type} term and the
+    \item The predicate read/1 collects the \arg{Syntax} term and the
           quoted text.
     \item After all normal processing is finished, read/1 calls the
 	  term below.
 
 \begin{code}
-call(+TypeName, +Content, +TypeArgs, +VarDict, -Result)
+call(+SyntaxName, +Content, +SyntaxArgs, +VarDict, -Result)
 \end{code}
 
-	  Above, \arg{TypeName} is the functor of the \arg{Type} term
-	  and \arg{TypeArgs} is the list of arguments, i.e.,
-	  \verb$Type =.. [TypeName|TypeArgs]$.  In \secref{examples},
+	  Above, \arg{SyntaxName} is the functor of the \arg{Syntax} term
+	  and \arg{SyntaxArgs} is the list of arguments, i.e.,
+	  \verb$Syntax =.. [SyntaxName|SyntaxArgs]$.  In \secref{examples},
 	  we will see why it is useful to split the functor from the
 	  arguments.  \arg{Content} is an opaque handle to the quoted
 	  material as we will see later.  \arg{VarDict} is
 	  \mbox{\arg{Name} = \arg{Var}} list conforming to read_term/3
 	  and write_term/3.  \arg{Result} is determined by the call to
-	  the deterministic predicate \arg{TypeName}/4.
+	  the deterministic predicate \arg{SyntaxName}/4.
 \end{itemize}
 
-We provide two support predicates for \arg{TypeName}/4 to process the
+We provide two support predicates for \arg{SyntaxName}/4 to process the
 result.  Note that there are no limits on how the called predicate
 combines the quoted text with the type arguments and variable dictionary
 to construct the final term.
@@ -531,7 +546,7 @@ to construct the final term.
     \predicate{phrase_from_quasi_quotation}{2}{:Grammar, +Content}
 Calls the grammar \arg{Grammar} on the list formed by \arg{Content}.
 This predicate uses the \jargon{pure input} library described in
-\cite{CYCLOPS/Wielemaker/2008} to parse the content.  Syntax errors
+\cite{CICLOPS/Wielemaker/2008} to parse the content.  Syntax errors
 may be raised using the non-terminal syntax_error//1, which produces
 a precise syntax location that consists of the file, line number,
 line position and character count.
@@ -546,7 +561,16 @@ byte count.
 \section{Examples of using quasi quotes in Prolog}
 \label{sec:examples}
 
-In this section we provide some examples to illustrate quasi quotations.
+In this section we provide three examples to illustrate quasi
+quotations. The first example (HTML) is based on the existing SWI-Prolog
+libraries for parsing and serializing HTML. The second example
+demonstrates how JavaScript can be handled safely (but with limited
+syntax checking support) by only tokenising the quotation. The third
+example concerns
+SPARQL,\footnote{\url{http://www.w3.org/TR/sparql11-overview/}}
+demonstrates the value of the quasi quotation approach in a scenario
+where the parsed quasi quotation is used as a Prolog query.
+
 
 \subsection{Quasi quoting HTML}
 
@@ -796,6 +820,9 @@ a quasi quotation. At the end read, if the list of quasi quotations is
 not empty, it materializes the variable dictionary and calls a routine
 that calls the quasi quotation parsers.
 
+The functionality is made available to the user through the library
+\const{quasi_quotations.pl}, which appears in SWI-Prolog 6.3.16.
+
 \section{Related work}
 
 Quasi quotations are in use with many `scripting' languages because they
@@ -861,7 +888,13 @@ material is (syntactically) correct and that Prolog material is
 %================================================================
 \subsection*{Acknowledgements}
 
-Michael Hendricks.  Jan Pobrislo,  Michiel Hildebrand (author)
+Michael Hendricks (Hendricks Solutions) suggested looking into Haskell's
+quasi quotations. Jan Pobrislo provided the insights that were used to
+write \secref{thebigthree}. Michiel Hildebrand and Jacco van
+Ossenbruggen (VU University Amsterdam) have tried many of the pure
+Prolog based alternatives which were needed to formulate \secref{needqq}
+and \secref{syntaxext}. They also help shaping the current JavaScript
+quasi quoter.
 
 
 \bibliographystyle{plain}
