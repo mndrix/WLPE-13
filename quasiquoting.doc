@@ -52,6 +52,8 @@
 \renewcommand{\arg}[1]{\ifmmode\mbox{\em #1}\else{\it #1}\fi}
 \newcommand{\secref}[1]{section~\ref{sec:#1}}
 \newcommand{\figref}[1]{figure~\ref{fig:#1}}
+\newcommand{\Figref}[1]{Figure~\ref{fig:#1}}
+\newcommand{\tabref}[1]{table~\ref{tab:#1}}
 \def\term{}
 \renewcommand{\term}[2]{%
 	\ifthenelse{\equal{\protect}{\protect#2}}{%
@@ -157,19 +159,20 @@ For example, consider identifier names that start with an uppercase
 letter, which will read as a Prolog variable.
 \end{itemize}
 
-In \cite{WLPE/Wielemaker/2012}, we claim that some simple language can
+In \cite{WLPE/Wielemaker/2012}, we claim that some simple languages can
 be covered well using these techniques, while it is possible to realise
 acceptable representations e.g., XML based languages by using a Prolog
 syntax that carries the (simple) datamodel of the language and others
-(e.g. SQL) can be supported partially using semantic transformations. In
-the above paper we propose a number of syntactic extensions to broaden
-the range of languages that can be supported using one of the above
-means.
+(e.g. SQL) can be supported partially using semantic transformations,
+i.e., calls to Prolog predicates are translated into SQL queries
+\cite{Draxler91}. In the above paper (\cite{WLPE/Wielemaker/2012}), we propose
+a number of syntactic extensions to broaden the range of languages that
+can be supported using one of the above means.
 
 In this paper, we propose a solution for complex external languages for
 which none of the above is applicable. The solution is called quasi
-quoting and borrowed from Haskell. A Haskell quasi quote consists of a
-function symbol and quoted text. The function can manipulate the text
+quoting and borrowed from Haskell. A Haskell quasi quotation consists of
+a function symbol and quoted text. The function can manipulate the text
 and massage it to fit further processing by Haskell. It is good practice
 for the function to create an abstract syntax tree by parsing the text
 according to the rules of the external language. As we will see in this
@@ -412,6 +415,7 @@ Prolog.
 
 
 \section{Quasi Quotations}
+\label{sec:quasiquote}
 
 Quasi quotations find their origin in
 linguistics\footnote{\url{http://en.wikipedia.org/wiki/Quasi-quotation}}
@@ -439,6 +443,7 @@ tree that can represent the target language.
 
 
 \section{Quasi Quotations in Prolog}
+\label{sec:plqq}
 
 We can solve our three problems by adding a syntactic construct that (1)
 provides long quoted strings, (2) associates the quoted material to a
@@ -541,12 +546,21 @@ byte count.
 \section{Examples of using quasi quotes in Prolog}
 \label{sec:examples}
 
-In this section we provide some examples to illustrate the power of
-these facilities. The first, complete, example illustrates safe
-embedding of long HTML texts in a Prolog web page.  The code of
-the quasi quoter is given in \figref{htmlqq}.  First, we give a
-fully working webserver based on this quasi quoter:
+In this section we provide some examples to illustrate quasi quotations.
 
+\subsection{Quasi quoting HTML}
+
+The first, complete, example illustrates safe embedding of long HTML
+texts in a Prolog web page. The code of the quasi quoter is given in
+\figref{htmlqq}. First, we give a fully working webserver based on this
+quasi quoter in \figref{date}. We notice that the quoted material can
+contain multiple lines, does not require any line endings and may
+contain quotes. The content of the quoted material is valid HTML and
+because an editor can easily detect the \verb$<![html$ and \verb$]]>$
+indicators, it is not hard for development tools to provide support for
+the embedded HTML, such as highlighting, indentation or completion.
+
+\begin{figure}
 \begin{code}
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
@@ -567,11 +581,34 @@ index(_Request) :-
 		<p>It is now <span class="time">Date</span>
 	       ]]>).
 \end{code}
+    \caption{Example web server with embedded HTML}
+    \label{fig:date}
+\end{figure}
 
+The HTML quasi quoter as defined in \figref{htmlqq} replaces Prolog
+variable indicated by its arguments (\term{html}{Date}) if they appear
+as value for an attribute or content of an element.  If does performs
+the following steps:
 
+\begin{enumerate}
+    \item Parse the quoted HTML text using load_html/3.  The option
+          \term{max_errors}{0} causes the parser to throw a syntax_error
+	  exception and abort on the first error.  As this processing
+	  happens while reading the source, the HTML syntax error is
+	  reported during compilation and includes line, line position
+	  and character count information.
+    \item The XML DOM structure is recursively traversed and attributes
+	  that have a Prolog variable as value or content that matches
+	  a Prolog variable is replaced by this variable.
+\end{enumerate}
 
-
-
+When the page is genered (\figref{date}), binding of the variable
+\arg{Date} completes the XML DOM structure. This structure is serialized
+by reply_html_page/3. The serialization ensures type safety and the
+generation of correct HTML syntax.\footnote{The HTML infrastructure
+has a global option to select between HTML and XHTML serialization,
+which implies that HTML in the Prolog source may be serialized as
+XHTML to the client.}
 
 \begin{figure}
 \begin{code}
@@ -616,26 +653,215 @@ xml_attribute(_, Attr, Attr).
 \end{figure}
 
 
+\subsection{Embedding JavaScript}
+\label{sec:jsqq}
+
+The HTML quasi quoter of the previous section as easily implemented
+because the SWI-Prolog infrastructure already contains a mature parser
+and serializer for HTML. We do not have these for JavaScript.  We are
+likely to develop this in the future, but here we want to illustrate
+that it is possible to achieve save template replacement by only using
+a \jargon{tokenizer}.
+
+Because JavaScript is generated as part of the HTML page generation,
+the JavaScript quasi quoter produces output for the HTML backend.  It
+translates the JavaScript into a list of two types of elements: (1)
+plain atoms (that will be emitted in the context of a \const{script}
+element) and calls to a grammar js_expression//1, which defines a
+translation of native Prolog data into JavaScript literals according
+to \tabref{jsconvert}.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\bf Prolog & \bf JavaScript \\
+\hline
+number	   & number \\
+atom	   & string (properly escaped) \\
+@true	   & boolean true \\
+@false	   & boolean false \\
+@null	   & null constant \\
+List	   & array \\
+object(NameValueList) & object literal \\
+\{ Name:Value, ...\} & object literal \\
+\hline
+\end{tabular}
+\end{center}
+    \caption{Prolog to JavaScript conversion}
+    \label{tab:jsconvert}
+\end{table}
+
+The quasi quoter tokenized the quoted material using an ecma script
+compliant tokenizer, implemented using a Prolog grammar. Next, it
+replaces identifier tokens that match with a Prolog variable with a call
+to js_expression//1, and translates the remainder into plain atoms.
+\Figref{jsqq} shows a shorted predicate from the SWI-Prolog website that
+applies the JavaScript quasi quoter to initialise a jQuery widget called
+\textit{tagit}. The actual predicate contains a larger configuration
+object, just `more of the same'. In this example, the first block is
+used to compute server URLs and properties for \arg{Obj} that we need in
+the remainder. Next, the html//1 call creates the DOM needed for the
+\textit{tagit} widget. Here, we could also have used the HTML quasi
+quoter. The choice is rather arbitrary in this case because the fragment
+is short and defines only structure and data that is passed in from a
+variable. Next, we see html_requires//1, which ensures that the page
+head is extended to load the required JavaScript and CSS resources and
+finally, there is the script fragment with embedded Prolog variables.
+Because Prolog variables are valid JavaScript identifiers, the fragment
+contains valid JavaScript syntax.
+
+\begin{figure}
+\begin{code}
+prolog:doc_object_page_footer(Obj, _Options) -->
+  { http_link_to_id(complete_tag, [], Complete),
+    http_link_to_id(show_tag, [], OnClick),
+    http_link_to_id(remove_tag, [], Remove),
+    object_id(Obj, ObjectID),
+    object_tags(Obj, Tags),
+    atomic_list_concat(Tags, ',', Data)
+  },
+  html(div(class('user-annotations'),
+	   input([id(tags), value(Data)]))),
+  html_requires(tagit),
+  js_script(<![javascript(Complete, OnClick, ObjectID, Remove)
+	       [$(document).ready(function() {
+		  $("#tags").tagit({
+		      autocomplete: { delay: 0.3,
+				      minLength: 1,
+				      source: Complete
+				    },
+		      onTagClicked: function(event, ui) {
+			window.location.href = OnClick+"tag="+
+			  encodeURIComponent(ui.tagLabel);
+		      },
+		      beforeTagRemoved: function(event, ui) {
+			$.ajax({ dataType: "json",
+				 url: Remove,
+				 data: { tag: ui.tagLabel,
+					 obj: ObjectID
+				       }
+			       });
+		      }
+		    });
+		});
+	       ]]>).
+\end{code}
+    \caption{Shortened code fragment from the SWI-Prolog website that
+	     illustrates the embedding of JavaScript for initializing
+	     a widget.}
+    \label{fig:jsqq}
+\end{figure}
+
+\subsection{Embedding SPARQL}
+
+SPARQL is the query language for the semantic web RDF language. In most
+of this section, one may replace SPARQL with SQL. ClioPatria is
+SWI-Prolog's semantic web framework, which contains a SPARQL `endpoint'.
+The SPARQL engine compiles a SPARQL query into a Prolog query, optimizes
+and executes this query and serializes the results according to the
+SPARQL result specification.
+
+When writing middleware (reasoning) in the ClioPatria, one typically
+uses direct queries to the embedded RDF store for the reasoning. In some
+cases, one would like to use SPARQL for specifying the query. Consider
+cases where the query is already available in SPARQL, the query must
+also be used with external servers or the author is much more fluent in
+SPARQL than in Prolog. The quasi quotation syntax can be used to write
+down the code below. The SPARQL query is parsed at compile time and the
+SPARQL projection variables can naturally integrate with the Prolog
+variable of the enclosing clause.
+
+\begin{code}
+   ...,
+   <![sparq[
+      [ SELECT ?Name, ?Place WHERE {
+	    ...
+	}
+      ]]>
+\end{code}
+
+A similar approach is feasible with SQL, offering a more convenient way
+to interact with the database than using \jargon{prepared statements}
+and both a safer and more convenient way than direct text-based SQL
+queries.
+
+\section{Implementation}
+
+The implementation of quasi quotation handling in an existing Prolog
+system is straightforward and should not require more than a couple of
+days. The tokenizer is extended to recognise \verb$<![$. On encountering
+this token, the parser builds a list of terms, each of which represents
+a quasi quotation. At the end read, if the list of quasi quotations is
+not empty, it materializes the variable dictionary and calls a routine
+that calls the quasi quotation parsers.
+
+\section{Related work}
+
+Quasi quotations are in use with many `scripting' languages because they
+form an easy to understand mechanism to create long strings with
+embedded variables that are given values determined by the environment.
+Pure textual replacement carries the risc of \jargon{injection} attacks,
+which triggered research towards more safe \jargon{template} engines.
+\footnote{%
+TAL (\url{http://www.owlfish.com/software/simpleTAL/tal-guide.html})\\
+Cheetah (\url{http://www.cheetahtemplate.org/examples.html})\\
+Django (\url{https://docs.djangoproject.com/en/dev/ref/templates/})\\
+Jinja2 (\url{http://jinja.pocoo.org/docs/templates/}).}
+Notably modern scripting languages such as Python and Ruby provide a
+rich pallete of such techniques. This paper follows the reasoning and
+technique described in ``Why It’s Nice to be Quoted: Quasiquoting for
+Haskell'' \cite{DBLP:conf/haskell/2007}.  We refer to this article for
+further background information.
 
 
+\section{Future work}
+
+Quasi quotations are young in SWI-Prolog. We believe that the core
+functionality described in this article is largely future-proof,
+possibly except for the issue of changing the start and end sequence and
+internal escaping.
+
+One of the future tasks is to establish libraries that facilitate syntax
+handling and safe replacement.  Another is to establish design patterns
+for using this technology.  What can be learn from the Haskell, Python
+and Ruby communities here?  Quasi quotations typically `evaluate' to
+a Prolog term that shares variables with the clause into which it is
+embedded.  We do not have a functional syntax that we can exploit to
+force `evaluation' of this term with instantiated variables.  On the
+other hand, we can also use the non-ground abstract syntax tree and
+use it for e.g., \textit{matching} tasks.
 
 
+\section{Conclusions}
 
+In this article we have motivated why it is necessary to be able to
+embed longer snippets of code written in another language in Prolog
+source code. This requires for a syntax that permits embedding,
+practically without the need for Prolog escaping in the embedded text.
+Next, this text must be related to Prolog data. The integration of
+Prolog data into the snippet must be done according to the syntax and
+data model of the external language. This implies we need a programmable
+component that is related to the quoted material.
 
+Combining these requirements into one syntactic extension that is
+executed by read/1 simplifies support by tooling such as editors,
+provides natural access to Prolog variables and allows for seemless
+integration of error messages.
 
-
-
-
-
-
-
-
-
-
+We have demonstrated quasi quotations using two implemented quoters.
+These quoters allow for easy copying and pasting material in their
+native syntax to and from Prolog source.  Using these quoters is
+likely to reduce the learning curve for embedding snippets into
+Prolog, while the quasi quoter can guarantee that the integrated
+material is (syntactically) correct and that Prolog material is
+\emph{safely} integrated.
 
 
 %================================================================
 \subsection*{Acknowledgements}
+
+Michael Hendricks.  Jan Pobrislo,  Michiel Hildebrand (author)
 
 
 \bibliographystyle{plain}
