@@ -10,7 +10,7 @@
 
 \begin{document}
 
-\title{Why It’s Nice to be Quoted: Quasiquoting for Prolog}
+\title{Why It's Nice to be Quoted: Quasiquoting for Prolog}
 \pagestyle{empty}
 
 \author{Jan Wielemaker}
@@ -162,7 +162,7 @@ letter, which will read as a Prolog variable.
 In \cite{WLPE/Wielemaker/2012}, we claim that some simple languages can
 be covered well using these techniques, while it is possible to realise
 acceptable representations e.g., XML based languages by using a Prolog
-syntax that carries the (simple) datamodel of the language and others
+syntax that carries the (simple) data model of the language and others
 (e.g. SQL) can be supported partially using semantic transformations,
 i.e., calls to Prolog predicates are translated into SQL queries
 \cite{Draxler91}. In the above paper (\cite{WLPE/Wielemaker/2012}), we propose
@@ -182,7 +182,7 @@ This paper is organised as follows. First, we revisit the problem
 statement and indicate why current support in Prolog is insufficient to
 solve this in an acceptable way. In \secref{quasiquote} we introduce the
 notion of quasi quoting and how it fits into managing strings that
-present datastructures in other languages. In \secref{plqq}, we
+present data structures in other languages. In \secref{plqq}, we
 introduce the concrete solution proposed for SWI-Prolog.  This is
 followed by examples and a conclusion.
 
@@ -192,7 +192,7 @@ followed by examples and a conclusion.
 We will explain this need by an example from SWI-Prolog's web page
 generating facilities \cite{TPLP06}. Web pages are by no means the only
 place where these problems arise \cite{DBLP:conf/haskell/2007}, but the
-domain is quite familar to many programmers and is of particular
+domain is quite familiar to many programmers and is of particular
 interest to us because generating web pages is an important application
 area for SWI-Prolog. A modern web page typically consists of HTML that
 creates the initial DOM structure, CSS that provides styling and
@@ -217,7 +217,7 @@ syntactically correct, regardless of the data from which the
 page is created.  This built-in protection against injection
 attacks is considered a key asset of the server infrastructure.
 
-In ealier publications \cite{WLPE/Wielemaker/2012,TPLP06} we already
+In earlier publications \cite{WLPE/Wielemaker/2012,TPLP06} we already
 identified two missing pieces: (1) longer (HTML) text fragments and (2)
 JavaScript fragments. The first problem can be solved using
 PWP\footnote{Prolog Well-formed Pages,
@@ -240,19 +240,19 @@ demands creating some a DOM structure that carries an \verb$id$
 attribute and represents the data (e.g., a menu may be represented as a
 \verb$ul$ list or an advanced text editor can be represented as a
 \verb$textarea$). This DOM element is transformed into the target web
-element by calling a JavaScript initialization function that modifies
+element by calling a JavaScript initialisation function that modifies
 the DOM of the target element and installs \textit{event handlers} that
-provide the dynamic behavior of the element. The initialization function
+provide the dynamic behavior of the element. The initialisation function
 typically requests a \textit{configuration} object (a JavaScript object
 literal, \mbox{\{name:value, \ldots\}}), where some of the values are
 \textit{callback functions}, represented as JavaScript Lambda functions.
 
 The HTML framework is well equipped to create the initial DOM and pull
 in the JavaScript and CSS resources using its dependency framework. The
-initialization call is easy enough to abstract, except when the
+initialisation call is easy enough to abstract, except when the
 configuration object contains Lambda functions. These are often required
-to massage the data into the desired vizualization and support AJAX
-based operations, such as computing autocompletion candidates. It is
+to massage the data into the desired visualisation and support AJAX
+based operations, such as computing auto-completion candidates. It is
 quite common for such objects to require dozens of lines of JavaScript.
 Representing JavaScript Lambda functions requires support for the the
 complete complexity of the language. One way to do this is to represent
@@ -461,10 +461,10 @@ none of which seems promising in the context of Prolog. The fact that
 Prolog symbol characters glue together and that sequences of symbol
 characters, singletons (e.g., !, and \chr{|}) can be used as operators
 limit the options. New syntax for Prolog should generally consider using
-two consequtive tokens that cannot be operators. With our extended
+two consecutive tokens that cannot be operators. With our extended
 operators (\secref{syntaxext}), that only leaves variables, numbers and
 double quoted strings. One option could be a triple quoted string
-prefixed or postfixed with a variable, as shown below.  The downsite
+prefixed or postfixed with a variable, as shown below.  The disadvantage
 of this is that this may well be legal syntax with a different meaning
 if the \verb$L$ is forgotten.
 
@@ -602,12 +602,12 @@ the following steps:
 	  a Prolog variable is replaced by this variable.
 \end{enumerate}
 
-When the page is genered (\figref{date}), binding of the variable
-\arg{Date} completes the XML DOM structure. This structure is serialized
-by reply_html_page/3. The serialization ensures type safety and the
+When the page is generated (\figref{date}), binding of the variable
+\arg{Date} completes the XML DOM structure. This structure is serialised
+by reply_html_page/3. The serialisation ensures type safety and the
 generation of correct HTML syntax.\footnote{The HTML infrastructure
-has a global option to select between HTML and XHTML serialization,
-which implies that HTML in the Prolog source may be serialized as
+has a global option to select between HTML and XHTML serialisation,
+which implies that HTML in the Prolog source may be serialised as
 XHTML to the client.}
 
 \begin{figure}
@@ -661,7 +661,7 @@ because the SWI-Prolog infrastructure already contains a mature parser
 and serializer for HTML. We do not have these for JavaScript.  We are
 likely to develop this in the future, but here we want to illustrate
 that it is possible to achieve save template replacement by only using
-a \jargon{tokenizer}.
+a \jargon{tokeniser}.
 
 Because JavaScript is generated as part of the HTML page generation,
 the JavaScript quasi quoter produces output for the HTML backend.  It
@@ -692,8 +692,8 @@ object(NameValueList) & object literal \\
     \label{tab:jsconvert}
 \end{table}
 
-The quasi quoter tokenized the quoted material using an ecma script
-compliant tokenizer, implemented using a Prolog grammar. Next, it
+The quasi quoter tokenises the quoted material using an ecma script
+compliant tokeniser, implemented using a Prolog grammar. Next, it
 replaces identifier tokens that match with a Prolog variable with a call
 to js_expression//1, and translates the remainder into plain atoms.
 \Figref{jsqq} shows a shorted predicate from the SWI-Prolog website that
@@ -790,7 +790,7 @@ queries.
 
 The implementation of quasi quotation handling in an existing Prolog
 system is straightforward and should not require more than a couple of
-days. The tokenizer is extended to recognise \verb$<![$. On encountering
+days. The tokeniser is extended to recognise \verb$<![$. On encountering
 this token, the parser builds a list of terms, each of which represents
 a quasi quotation. At the end read, if the list of quasi quotations is
 not empty, it materializes the variable dictionary and calls a routine
@@ -810,7 +810,7 @@ Django (\url{https://docs.djangoproject.com/en/dev/ref/templates/})\\
 Jinja2 (\url{http://jinja.pocoo.org/docs/templates/}).}
 Notably modern scripting languages such as Python and Ruby provide a
 rich pallete of such techniques. This paper follows the reasoning and
-technique described in ``Why It’s Nice to be Quoted: Quasiquoting for
+technique described in ``Why It's Nice to be Quoted: Quasiquoting for
 Haskell'' \cite{DBLP:conf/haskell/2007}.  We refer to this article for
 further background information.
 
