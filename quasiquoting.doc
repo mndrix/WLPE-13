@@ -492,7 +492,7 @@ quotation marks that embed a description of the content. Here, we see
 the Haskell example of \verb$[type|quoted]$ and the XML example
 \verb$<![CDATA[quoted]]>$. The XML example is particularly interesting
 because the \chr{!} is a poor choice for an
-operator\footnote{\url{http://comments.gmane.org/gmane.comp.lang.swi-prolog.general/5609}},
+operator\footnote{\url{http://permalink.gmane.org/gmane.comp.lang.swi-prolog.general/5613}},
 while the remainder is not a valid Prolog list. Following this, we
 propose the following syntax for Prolog quasi quotations, where
 \arg{Syntax} is an arbitrary (callable) Prolog term:
