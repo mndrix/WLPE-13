@@ -254,16 +254,16 @@ handlers} that provide the dynamic behavior of the element. The
 initialisation function often takes a \textit{configuration} object (a
 JavaScript \jargon{object literal}, \mbox{\{name:value, \ldots\}}),
 where some of the values are \textit{callback functions}, represented as
-JavaScript Lambda functions.
+JavaScript lambda functions.
 
 The HTML framework is well equipped to create the initial DOM and pull
 in the JavaScript and CSS resources using its dependency framework. The
 initialisation call is easy enough to abstract, except when the
-configuration object contains Lambda functions. These are often required
+configuration object contains lambda functions. These are often required
 to massage JSON data from the server into the desired visualisation and
 support AJAX based operations, such as computing auto-completion
 candidates. It is quite common for such objects to require dozens of
-lines of JavaScript. Representing JavaScript Lambda functions requires
+lines of JavaScript. Representing JavaScript lambda functions requires
 support for the complete complexity of the language. One way to do
 this is to represent the JavaScript fragment as a list of literals,
 mixed with DCG rules that insert content generated from Prolog, such as
@@ -294,7 +294,7 @@ considered satisfactory. Below are the main directions that we tried.
 	  problematic because it makes it hard for the programmer to
 	  relate the JavaScript examples from the framework
 	  documentation to the Prolog code.  Although it is possible
-	  to abstract some of the Lambda functions, there is
+	  to abstract some of the lambda functions, there is
 	  too much variation to deal with all of them.
     \item Put the JavaScript in a separate file.  This creates many
           short files that typically only support a specific generated
@@ -304,7 +304,7 @@ considered satisfactory. Below are the main directions that we tried.
 	  the two pages, it is hard to relate them and keep them in
 	  sync.
     \item Create application specific JavaScript resources that can be
-	  configured without the need for Lambda functions in the
+	  configured without the need for lambda functions in the
 	  configuration object. The problem here is that the
 	  application developers create their own refinement of the
 	  external widget library that requires understanding and
@@ -360,7 +360,7 @@ JavaScript syntax with the following problems:
 
 We believe that the result would have been more usable than using Prolog
 quoted atoms for short (1-10 lines) JavaScript snippets, that include
-simple Lambda functions such as making trivial AJAX callbacks. Our main
+simple lambda functions such as making trivial AJAX callbacks. Our main
 point of doubt is that it is hard to convey the restrictions to casual
 Prolog users, which makes it likely to get surprised by output that
 differs from the expectations and can only be understood through deep
