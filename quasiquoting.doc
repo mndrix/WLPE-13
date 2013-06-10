@@ -315,9 +315,7 @@ considered satisfactory. Below are the main directions that we tried.
 \end{itemize}
 
 We have come to the conclusion that (1) we need a mechanism that allows
-for including JavaScript into the Prolog page generation source code
-because putting the relatively short fragments in a separate file while
-the Prolog and JavaScript file are highly dependent is not managable,
+for including JavaScript into the Prolog page generation source code,
 (2) the representation of JavaScript in the Prolog source must be easy
 to type and understand, (3) the generated JavaScript should be
 safeguarded against injection attacks without the need for user
