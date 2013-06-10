@@ -268,7 +268,7 @@ support for the complete complexity of the language. One way to do
 this is to represent the JavaScript fragment as a list of literals,
 mixed with DCG rules that insert content generated from Prolog, such as
 URLs or JavaScript literal objects. This leads to code as below, which
-we consider hard to type, hard to read and because it is so hard to
+we consider hard to type, hard to read and, because it is so hard to
 read, often subject to syntax errors. Finally, the code below is subject
 to injection attacks, unless we hand the variables \arg{URL} and
 \arg{Id} to a grammar that generates valid JavaScript string content
