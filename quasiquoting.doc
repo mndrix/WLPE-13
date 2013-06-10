@@ -205,7 +205,7 @@ creates the initial DOM structure, CSS that provides styling and
 JavaScript for creating interactive components. Our solution for
 generating HTML is similar to PiLLoW \cite{PiLLoW} and based on
 representing the HTML DOM structure as a nested Prolog term.  The
-SWI-Prolog HTML page generation library has matured and provides
+SWI-Prolog HTML page generation library and provides
 good solutions for
 
 \begin{itemize}
